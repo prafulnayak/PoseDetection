@@ -1,22 +1,19 @@
-// 1. Install dependencies DONE
-// 2. Import dependencies DONE
-// 3. Setup webcam and canvas DONE
-// 4. Define references to those DONE
-// 5. Load posenet DONE
-// 6. Detect function DONE
-// 7. Drawing utilities from tensorflow DONE
-// 8. Draw functions DONE
-
 import React, { useRef, useEffect } from "react";
 import "./App.css";
 import * as tf from "@tensorflow/tfjs";
 import * as posenet from "@tensorflow-models/posenet";
 import Webcam from "react-webcam";
-import { drawKeypoints, drawSkeleton } from "./utilities";
+import { drawKeypoints, drawSkeleton, isMobile } from "./utilities";
 
 function App() {
   const webcamRef = useRef(null);
   const canvasRef = useRef(null);
+  const handRaiseCountRef = useRef(0);
+  const prevHandRaisedRef = useRef(false);
+
+  const videoConstraints = isMobile()
+    ? { facingMode: { exact: "environment" } } // Back camera for mobile devices
+    : { facingMode: "user" }; // Front camera for laptops
 
   useEffect(() => {
     const runPoseNet = async () => {
@@ -50,6 +47,24 @@ function App() {
 
           drawKeypoints(pose.keypoints, 0.6, ctx);
           drawSkeleton(pose.keypoints, 0.6, ctx);
+
+          // Check if hand is raised above shoulder with confidence >= 0.6
+          const leftWrist = pose.keypoints.find(point => point.part === 'leftWrist');
+          const rightWrist = pose.keypoints.find(point => point.part === 'rightWrist');
+          const leftShoulder = pose.keypoints.find(point => point.part === 'leftShoulder');
+          const rightShoulder = pose.keypoints.find(point => point.part === 'rightShoulder');
+
+          const handRaised = (
+            (leftWrist.score >= 0.6 && leftShoulder.score >= 0.6 && leftWrist.position.y < leftShoulder.position.y) ||
+            (rightWrist.score >= 0.6 && rightShoulder.score >= 0.6 && rightWrist.position.y < rightShoulder.position.y)
+          );
+
+          if (handRaised && !prevHandRaisedRef.current) {
+            handRaiseCountRef.current += 1;
+            console.log("Hand raised ${handRaiseCountRef.current} times");
+          }
+
+          prevHandRaisedRef.current = handRaised;
         }
       };
 
@@ -71,10 +86,11 @@ function App() {
             left: 0,
             right: 0,
             textAlign: "center",
-            zindex: 9,
+            zIndex: 9,
             width: 320,
             height: 240,
           }}
+          videoConstraints={videoConstraints}
         />
         <canvas
           ref={canvasRef}
@@ -85,11 +101,14 @@ function App() {
             left: 0,
             right: 0,
             textAlign: "center",
-            zindex: 9,
+            zIndex: 9,
             width: 320,
             height: 240,
           }}
         />
+        <div style={{ position: "absolute", top: 10, left: 10, zIndex: 10, color: "white" }}>
+          Hand Raise Count: {handRaiseCountRef.current}
+        </div>
       </header>
     </div>
   );
